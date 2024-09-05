@@ -1,0 +1,23 @@
+wheel==0.44.0
+setuptools==74.1.0
+
+# core
+fastapi[standard]==0.112.2
+uvicorn[standard]==0.30.6
+asyncpg==0.29.0
+sqlalchemy[asyncio]==2.0.32
+alembic==1.13.2
+python-ulid==2.7.0
+
+# json
+orjson==3.10.7
+
+# miscellaneous
+ruff==0.6.3
+
+# utils
+sqlalchemy-utils==0.41.2
+Babel==2.16.0
+pydantic-extra-types==2.9.0
+pycountry==24.6.1
+aiofiles==24.1.0
