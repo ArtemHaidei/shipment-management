@@ -1,13 +1,14 @@
 import logging
+import asyncio
 from typing import Annotated
 from datetime import datetime
 from fastapi import status
 from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi.responses import JSONResponse
 
 from app.schemas.shipment import ShipmentListOut
 from app.crud.shipment import retrive_shipments_from_db, create_shipment_in_db
-from app.schemas.shipment import ShipmentIn, ShipmentOut
-
+from app.schemas.shipment import ShipmentIn, ShipmentPostOut
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SHIPMENT API")
@@ -32,9 +33,9 @@ async def retrive_shipments(
         list[str] | None,
         Query(
             title="List of carriers to filter by",
-            min_length=2,
+            min_length=1,
             max_length=128,
-            example=["DHL", "FedEx"],
+            example=["dhl-express", "ups", "fedex"],
         ),
     ] = None,
     min_price: Annotated[
@@ -51,14 +52,13 @@ async def retrive_shipments(
     """
     Retrieves a list of shipments from the database.
 
-    :param start_datetime:
-    :param end_datetime:
-    :param carriers:
-    :param min_price:
-    :param max_price:
-    :param page:
-    :param limit:
-    :return:
+    ### - query param `start_datetime`
+    ### - query param `end_datetime`
+    ### - query param `carriers`
+    ### - query param `min_price`
+    ### - query param `max_price`
+    ### - query param `page`
+    ### - query param `limit`
     """
     if min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(
@@ -84,22 +84,44 @@ async def retrive_shipments(
     return {
         "page": page,
         "next_page": page + 1 if total > page * limit else None,
+        "last_page": total // limit + 1,
         "limit": limit,
         "total": total,
         "items": len(shipments),
-        "shipments": shipments,
+        "records": shipments,
     }
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=list[ShipmentOut])
+# response_model=list[ShipmentOut]
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=ShipmentPostOut)
 async def create_shipment(
-    shipments: Annotated[list[ShipmentIn], Body(title="List of shipments")],
+    shipments: Annotated[
+        list[ShipmentIn], Body(title="List of shipments", min_length=1, max_length=100)
+    ],
 ):
-    sipments: list[ShipmentOut] = await create_shipment_in_db(shipments)
-
-    if not sipments:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="No shipments created."
+    cariers = await asyncio.gather(
+        *(shipment.validate_carrier() for shipment in shipments)
+    )
+    result = await asyncio.gather(
+        *(
+            shipment.address.check_if_country_state_city_exists(shipment)
+            for shipment in shipments
         )
+    )
+    result_lst, records_recieved_len = await create_shipment_in_db(result, cariers)
+    created_records = len(result_lst)
 
-    return sipments
+    if created_records != records_recieved_len:
+        return JSONResponse(
+            content={
+                "created": created_records,
+                "message": "Some records were not created",
+            },
+            status_code=status.HTTP_200_OK,
+        )
+    print(isinstance(result_lst, list))
+    return {
+        "created": created_records,
+        "records": result_lst,
+        "message": "All records created",
+    }

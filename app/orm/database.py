@@ -1,7 +1,7 @@
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncAttrs
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 DATABASE_URI = "postgresql+asyncpg://postgres:postgres@localhost:5434/senvo-dev-db"
 
@@ -14,7 +14,7 @@ engine = create_async_engine(
     },
 )
 
-async_session = AsyncSession(engine, expire_on_commit=False)
+async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 
 class Base(AsyncAttrs, DeclarativeBase):

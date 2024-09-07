@@ -1,41 +1,33 @@
+import logging
+
 from uuid import UUID
-from typing import Optional, Self
+from typing import Any
 from sqlalchemy import select
-from pydantic import field_validator, model_validator, create_model
-from pydantic import BaseModel, Field, ConfigDict, ValidationError
+from fastapi import HTTPException
+from pydantic import field_validator, model_validator
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.orm.database import async_session
 from app.orm.models import Country, State, City
+from app.exceptions.address import (
+    CityStateMismatchError,
+    CountryNotFoundError,
+    StateNotFoundError,
+    CityNotFoundError,
+    StateCountryMismatchError,
+    CityCountryMismatchError,
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ADDRESS SCHEMA")
 
 
-# ============================= Base =============================
-class CountryBase(BaseModel):
-    model_config = ConfigDict(title="Country Query", from_attributes=True)
-    name: str = Field(
-        ...,
-        title="Country Name",
-        description="The name of the country.",
-        max_length=100,
-        min_length=2,
-    )
-    code: str = Field(
-        ...,
-        title="Country Code",
-        description="The numeric code of the country.",
-        pattern="^[0-9]{3}$",
-    )
-    iso2: str = Field(
-        ...,
-        title="Country ISO2",
-        description="ISO2 code must be exactly 2 uppercase or lowercase letters.",
-        pattern="^[A-Za-z]{2}$",
-    )
-    iso3: str = Field(
-        ...,
-        title="Country ISO3",
-        description="ISO3 code must be exactly 3 uppercase or lowercase letters.",
-        pattern="^[A-Za-z]{3}$",
-    )
+# ============================= Country =============================
+class CountryIn(BaseModel):
+    name: str = Field(..., max_length=100, min_length=2)
+    code: str = Field(..., pattern="^[0-9]{3}$")
+    iso2: str = Field(..., pattern="^[A-Za-z]{2}$")
+    iso3: str = Field(..., pattern="^[A-Za-z]{3}$")
 
     @field_validator("iso2", "iso3", mode="before")  # noqa
     @classmethod
@@ -43,51 +35,89 @@ class CountryBase(BaseModel):
         return value.upper()
 
 
-class CountryOptional(BaseModel):
+class CountryOneField(BaseModel):
     model_config = ConfigDict(title="Country Search")
-    name: str | None
-    code: str | None
-    iso2: str | None
-    iso3: str | None
+    name: str | None = Field(
+        None,
+        title="Country Name",
+        max_length=100,
+        min_length=2,
+        examples=["United States", "Canada", "Mexico"],
+    )
+    code: str | None = Field(
+        None,
+        title="Country Code",
+        description="The numeric code of the country.",
+        pattern="^[0-9]{3}$",
+        examples=["840", "124", "484"],
+    )
+    iso2: str | None = Field(
+        None,
+        title="Country ISO2",
+        description="ISO2 code must be exactly 2 uppercase or lowercase letters.",
+        pattern="^[A-Za-z]{2}$",
+        examples=["US", "CA", "MX"],
+    )
+    iso3: str | None = Field(
+        None,
+        title="Country ISO3",
+        description="ISO3 code must be exactly 3 uppercase or lowercase letters.",
+        pattern="^[A-Za-z]{3}$",
+        examples=["USA", "can", "MEX"],
+    )
 
-    @model_validator(mode="before")
+    @field_validator("iso2", "iso3", mode="before")  # noqa
     @classmethod
-    def check_if_no_search_params(cls, values: dict) -> None:
-        if not any(values.values()):
-            raise ValidationError(
-                "At least one search parameter for Country must be provided."
-            )
+    def uppercase_country_code(cls, value: str) -> str:
+        return value.upper() if value else None
 
-    def get_search_params(self) -> str:
+    @model_validator(mode="after")
+    def check_if_no_search_params(self):
+        if not any(self.model_dump().values()):
+            raise HTTPException(
+                status_code=400,
+                detail="At least one search parameter for Country must be provided.",
+            )
+        return self
+
+    def get_search_params(self) -> tuple[str, str]:
         for key, value in self.model_dump().items():
             if value:
-                return value
+                return key, value
+
+    def get_existed_field(self) -> str:
+        key, value = self.get_search_params()
+        return value
 
 
-class StateBase(BaseModel):
-    model_config = ConfigDict(title="State Base", from_attributes=True)
+# ============================= In =============================
+class StateIn(BaseModel):
     name: str = Field(
         ...,
-        title="State Name",
-        description="The state's name must contain at least 3 symbols and a maximum of 100.",
         max_length=100,
         min_length=1,
     )
+    country_id: UUID
 
 
-class CityBase(BaseModel):
-    model_config = ConfigDict(title="City Base", from_attributes=True)
+class CityIn(BaseModel):
     name: str = Field(
         ...,
-        title="City Name",
-        description="The city's name must contain at least 3 symbols and a maximum of 100.",
         max_length=100,
         min_length=1,
     )
+    state_id: UUID
+    country_id: UUID
 
 
-class AddressBase(BaseModel):
-    model_config = ConfigDict(title="Address Base", from_attributes=True)
+class AddressId(BaseModel):
+    shipment: Any
+    city_id: UUID
+    state_id: UUID
+    country_id: UUID
+
+
+class AddressIn(BaseModel):
     postal_code: str = Field(
         ...,
         title="Postal Code",
@@ -109,188 +139,81 @@ class AddressBase(BaseModel):
         examples=["Apt. 1234", "PO Box 1234"],
     )
 
-
-# ============================= Search =============================
-CountryOneField = create_model(
-    "CountryOptional",
-    **{
-        field: (Optional[type_], None)
-        for field, type_ in CountryBase.__annotations__.items()
-    },
-    __base__=CountryOptional,
-)
-
-
-# ============================= In =============================
-class StateIn(StateBase):
-    model_config = ConfigDict(title="State In")
-    """
-    Model for creating a state record in the database.
-
-    :param name: The name of the state.
-    :param country_id: The UUID of the country.
-    """
-    country_id: UUID
-
-
-class CityIn(CityBase):
-    model_config = ConfigDict(title="City In")
-    """
-    Model for creating a city record in the database.
-
-    :param name: The name of the city.
-    :param state_id: The UUID of the state.
-    :param country_id: The UUID of the country.
-    """
-    state_id: UUID
-    country_id: UUID
-
-
-class AddressIn(AddressBase):
-    model_config = ConfigDict(title="Address In")
-    city_id: UUID = None
-    state_id: UUID = None
-    country_id: UUID = None
-    city: CityBase = Field(
-        ...,
-        title="City",
-        description="The city where the address is located.",
-        exclude=True,
-    )
-    state: StateBase = Field(
-        ...,
-        title="State",
-        description="The state where the address is located.",
-        exclude=True,
-    )
-    country: CountryOneField = Field(
-        ...,
-        title="Country",
-        description="The country where the address is located.",
-        exclude=True,
-    )
-
-    @model_validator(mode="after")
-    async def check_if_country_state_city_exists(self) -> Self:
-        async with async_session as session:
-            async with session.begin():
-                country_search_param = self.country.get_search_params()
-                country = await session.execute(
-                    select(Country).filter(
-                        getattr(Country, country_search_param) == country_search_param
-                    )
-                )
-                if not country:
-                    raise ValidationError("Country does not exist.")
-
-                result = await session.execute(
-                    select(State).filter_by(name=self.state.name, country_id=country.id)
-                )
-                state = result.scalars().first()
-                if not state:
-                    raise ValidationError("State does not exist.")
-
-                if state.country_id != country.id:
-                    raise ValidationError(
-                        "State does not belong to the provided country."
-                    )
-                result = await session.execute(
-                    select(City).filter_by(
-                        name=self.city.name, state_id=state.id, country_id=country.id
-                    )
-                )
-                city = result.scalars().first()
-
-                if not city:
-                    raise ValidationError("City does not exist.")
-
-                if city.state_id != state.id:
-                    raise ValidationError("City does not belong to the provided state.")
-
-                if city.country_id != country.id:
-                    raise ValidationError(
-                        "City does not belong to the provided country."
-                    )
-
-                self.city_id = city.id
-                self.state_id = state.id
-                self.country_id = country.id
-
-        return self
-
-
-# ============================= OUT =============================
-# ----------------------------- Country -----------------------------
-class CountryOutName(BaseModel):
-    model_config = ConfigDict(title="Country Out", from_attributes=True)
-    name: str
-
-
-class CountryOutISO3(BaseModel):
-    model_config = ConfigDict(title="Country Out ISO3", from_attributes=True)
-    iso3: str
-
-
-class CountryOutISO2(BaseModel):
-    model_config = ConfigDict(title="Country Out ISO2", from_attributes=True)
-    iso2: str
-
-
-class CountryOutNumericCode(BaseModel):
-    model_config = ConfigDict(title="Country Out Numeric Code", from_attributes=True)
-    code: str
-
-
-class CountryOut(CountryOutName, CountryOutISO3, CountryOutISO2, CountryOutNumericCode):
-    model_config = ConfigDict(title="Country Out", from_attributes=True)
-    ...
-
-
-# ----------------------------- State -----------------------------
-class StateOutName(BaseModel):
-    model_config = ConfigDict(title="State Out", from_attributes=True)
-    name: str
-
-
-# ----------------------------- City -----------------------------
-class CityOutName(BaseModel):
-    model_config = ConfigDict(title="City Out", from_attributes=True)
-    name: str
-
-
-# ----------------------------- Address -----------------------------
-class AddressOutBase(AddressBase):
-    model_config = ConfigDict(title="Address Out", from_attributes=True)
-    city: CityOutName
-    state: StateOutName
-    country: CountryOutISO3
-
-
-class AddressOut(AddressOutBase):
-    model_config = ConfigDict(title="Address Out", from_attributes=True)
     city: str = Field(
         ...,
-        title="City",
-        description="The city where the address is located.",
-        examples=["New York", "Los Angeles", "Chicago"],
+        title="City Name",
+        description="The city's name must contain at least 3 symbols and a maximum of 100.",
+        max_length=100,
+        min_length=1,
     )
     state: str = Field(
         ...,
-        title="State",
-        description="The state where the address is located.",
-        examples=["California", "Texas", "Florida"],
+        title="City Name",
+        description="The city's name must contain at least 3 symbols and a maximum of 100.",
+        max_length=100,
+        min_length=1,
     )
-    country: str = Field(
-        ...,
-        title="Country",
-        description="The country where the address is located.",
-        examples=["USA", "Canada", "Mexico"],
-    )
+    country: CountryOneField
 
+    @field_validator("address_line_2", mode="before")  # noqa
     @classmethod
-    def out(cls, adrress: AddressOutBase) -> Self:
-        fields = adrress.model_dump()
-        fields["city"] = adrress.city.name
-        fields["state"] = adrress.state.name
-        fields["country"] = adrress.country.iso3
-        return cls(**fields)
+    def check_address_line_2(cls, value: str) -> str | None:
+        return value if value else None
+
+    async def check_if_country_state_city_exists(self, parent: Any) -> AddressId:
+        async with async_session() as session:
+            async with session.begin():
+                field, value = self.country.get_search_params()
+                country = await session.execute(
+                    select(Country).filter(getattr(Country, field) == value)
+                )
+                country = country.scalars().first()
+
+                if not country:
+                    raise CountryNotFoundError(value)
+
+                result = await session.execute(
+                    select(State).filter_by(name=self.state, country_id=country.id)
+                )
+                state = result.scalars().first()
+                if not state:
+                    raise StateNotFoundError(self.state)
+
+                if state.country_id != country.id:
+                    raise StateCountryMismatchError(self.state, country.name)
+
+                result = await session.execute(
+                    select(City).filter_by(
+                        name=self.city, state_id=state.id, country_id=country.id
+                    )
+                )
+                city = result.scalars().first()
+                if not city:
+                    raise CityNotFoundError(self.city)
+
+                if city.state_id != state.id:
+                    raise CityStateMismatchError(self.city, self.state)
+
+                if city.country_id != country.id:
+                    raise CityCountryMismatchError(self.city, country.name)
+
+        return AddressId(
+            shipment=parent, city_id=city.id, state_id=state.id, country_id=country.id
+        )
+
+
+# ============================= OUT =============================
+class AddressOut(BaseModel):
+    model_config = ConfigDict(title="Address Out")
+    postal_code: str
+    address_line_1: str
+    address_line_2: str | None
+
+    city: str
+    state: str
+    country: str
+
+    @field_validator("city", "state", "country", mode="before")  # noqa
+    @classmethod
+    def retrive_name(cls, field) -> str:
+        return field.name

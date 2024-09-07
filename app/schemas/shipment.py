@@ -1,36 +1,30 @@
+import logging
 import re
+from typing import Any
+
 from uuid import UUID
-from typing import Self
-from datetime import datetime
 from sqlalchemy import select
-from pydantic import constr, field_validator, model_validator
-from pydantic import BaseModel, Field, ConfigDict, ValidationError
+from pydantic import constr, field_validator
+from pydantic import BaseModel, Field, ConfigDict
 
-from app.choices import WeightUnit, DimensionsUnit, CurrencyEnum
-from .address import AddressIn, AddressOutBase, AddressOut
 from app.orm.models import Carrier
-
-
 from app.orm.database import async_session
+from datetime import datetime, timezone
+from app.choices import WeightUnit, DimensionsUnit, CurrencyEnum
+from .address import AddressIn, AddressOut
+from app.exceptions.shipment import (
+    CarrierNotFoundError,
+    ShipmentNumberMismatchError,
+    ShipmentDateError,
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("SHIPMENT SCHEMA")
 
 
-# ============================= Base =============================
-class CarrierBase(BaseModel):
-    model_config = ConfigDict(title="Carrier Base")
-
-    name: str = Field(
-        ...,
-        title="Carrier Name",
-        description="The name of the carrier should be between 3 and 128 symbols.",
-        max_length=128,
-        min_length=3,
-        examples=["UPS", "FedEx", "DHL Express"],
-    )
-
-
-class PackageBase(BaseModel):
+class PackageIn(BaseModel):
     model_config = ConfigDict(
-        title="Carrier Create", from_attributes=True, use_enum_values=True
+        title="Carrier Create",
     )
 
     weight: float = Field(
@@ -79,16 +73,35 @@ class PackageBase(BaseModel):
     )
 
 
-class ShipmentBase(BaseModel):
-    model_config = ConfigDict(
-        title="Shipment Base", from_attributes=True, use_enum_values=True
+# ============================= In =============================
+class CarrierIn(BaseModel):
+    model_config = ConfigDict(title="Carrier In")
+
+    name: str = Field(
+        ...,
+        title="Carrier Name",
+        description="The name of the carrier should be between 3 and 128 symbols.",
+        max_length=128,
+        min_length=3,
+        examples=["ups", "fedex", "dhl-express"],
     )
+
+    regex_tracking_number: dict[str, constr(pattern=r"^(?:\\.|[^\\])+$")] = Field(
+        ...,
+        title="Regex Tracking Number",
+        description="The regex pattern for the tracking number of the carrier.",
+        examples=[{"standard": r"^1Z[A-Za-z0-9]{16}$"}],
+    )
+
+
+class ShipmentIn(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
 
     shipment_number: str = Field(
         ...,
         title="Shipment Number",
         description="The shipment number should be between a valid tracking number of the carrier.",
-        max_length=128,
+        max_length=40,
         min_length=3,
         examples=["1Z12345E1512345676", "1Z12345E1512345677"],
     )
@@ -128,108 +141,102 @@ class ShipmentBase(BaseModel):
         validate_default=True,
     )
 
-
-# ============================= In =============================
-# ----------------------------- Carrier -----------------------------
-class CarrierIn(CarrierBase):
-    model_config = ConfigDict(title="Carrier In")
-
-    regex_tracking_number: dict[str, constr(pattern=r"^(?:\\.|[^\\])+$")] = Field(
+    carrier: str = Field(
         ...,
-        title="Regex Tracking Number",
-        description="The regex pattern for the tracking number of the carrier.",
-        examples=[{"standard": r"^1Z[A-Za-z0-9]{16}$"}],
+        title="Carrier Name",
+        description="The name of the carrier should be between 3 and 128 symbols.",
+        max_length=128,
+        min_length=3,
+        examples=["ups", "fedex", "dhl-express"],
     )
-
-
-# ----------------------------- Shipment -----------------------------
-class ShipmentIn(ShipmentBase):
-    model_config = ConfigDict(title="Shipment In", use_enum_values=True)
-    carrier: CarrierIn = Field(
-        ...,
-        title="Carrier",
-        description="The carrier of the shipment.",
-        exclude=True,
-    )
-    carrier_id: UUID = None
     address: AddressIn
-    packages: list[PackageBase]
+    packages: list[PackageIn]
 
-    @field_validator("shipment_date")  # noqa
+    @field_validator("shipment_date", mode="after")  # noqa
     @classmethod
     def check_if_not_in_future(cls, v: datetime) -> datetime:
-        if v > datetime.now():
-            raise ValidationError(
-                "The date when the shipment was picked up cannot be in the future."
-            )
+        if v.tzinfo is None and v.replace(tzinfo=timezone.utc) > datetime.now(
+            timezone.utc
+        ):
+            raise ShipmentDateError()
         return v
 
-    @model_validator(mode="after")  # noqa
-    async def check_carrier_exists(self) -> Self:
-        async with async_session as session:
-            async with session.begin():
-                result = await session.execute(
-                    select(Carrier).where(name=self.carrier.name)
-                )
-                carrier: Carrier = result.scalar()
+    async def validate_carrier(self) -> Any:
+        async with async_session() as session, session.begin():
+            result = await session.execute(
+                select(Carrier).where(Carrier.name == self.carrier)  # noqa
+            )
+            carrier: Carrier = result.scalar()
 
-                if not carrier:
-                    raise ValidationError(
-                        f"Carrier \"{self.carrier.name}' does not exist."
-                    )
+            if not carrier:
+                return CarrierNotFoundError(self.carrier)
 
-                self.carrier_id = carrier.id
+            patterns = carrier.regex_tracking_number.values()
 
-                for pattern in self.carrier.regex_tracking_number.values():
-                    if not re.match(pattern=pattern, string=self.shipment_number):
-                        raise ValidationError(
-                            f'Shipment number does not match any patter of the carrier "{self.carrier.name}".'
-                        )
-        return self
+            if not any(
+                re.match(pattern=pattern, string=self.shipment_number)
+                for pattern in patterns
+            ):
+                return ShipmentNumberMismatchError(self.carrier, self.shipment_number)
+
+            return carrier
 
 
 # ============================= OUT =============================
-class ShipmentOutBase(ShipmentBase):
-    model_config = ConfigDict(title="Shipment Out Base", from_attributes=True, use_enum_values=True)
+class PackageOut(BaseModel):
+    id: UUID
+    weight: float
+    weight_unit: WeightUnit
+    length: float
+    width: float
+    height: float
+    dimensions_unit: DimensionsUnit
 
-    carrier: CarrierBase
-    address: AddressOutBase
-    packages: list[PackageBase]
 
+class ShipmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
-class ShipmentOut(ShipmentOutBase):
-    model_config = ConfigDict(title="Shipment Out", from_attributes=True, use_enum_values=True)
-
+    id: UUID
+    shipment_number: str
+    shipment_date: datetime
+    price: float
+    currency: CurrencyEnum
+    total_weight: float
+    total_weight_unit: WeightUnit
+    carrier: str
     address: AddressOut
-    carrier: str = Field(
-        ...,
-        title="Carrier",
-        description="The carrier of the shipment.",
-        examples=["UPS", "FedEx", "DHL Express"],
-    )
+    packages: list[PackageOut]
 
+    @field_validator("currency", mode="before")  # noqa
     @classmethod
-    def out(cls, shipment):
-        fields = shipment.model_dump()
-        fields["carrier"] = shipment.carrier.name
-        fields["address"] = AddressOut.out(shipment.address).model_dump()
-        return cls(**fields)
+    def retrive_currency(cls, field) -> str:
+        return field.code
+
+    @field_validator("carrier", mode="before")  # noqa
+    @classmethod
+    def retrive_name(cls, field) -> str:
+        return field.name
 
 
 class ShipmentListOut(BaseModel):
-    model_config = ConfigDict(title="Country Out", from_attributes=True, use_enum_values=True)
+    model_config = ConfigDict(title="Country Out")
 
-    shipments: list[ShipmentOut]
     page: int = Field(
         ...,
         title="Page Number",
         description="The current page number.",
         ge=1,
     )
-    next_page: int = Field(
+    next_page: int | None = Field(
         None,
         title="Next Page Number",
         description="The next page number.",
+    )
+    last_page: int = Field(
+        ...,
+        title="Last Page Number",
+        description="The last page number.",
+        ge=1,
     )
     limit: int = Field(
         ...,
@@ -247,3 +254,14 @@ class ShipmentListOut(BaseModel):
         title="Items",
         description="The number of items on the current page.",
     )
+    records: list[ShipmentOut]
+
+
+class PostOut(BaseModel):
+    created: int
+    message: str
+
+
+class ShipmentPostOut(PostOut):
+    model_config = ConfigDict(from_attributes=True)
+    records: list[ShipmentOut]

@@ -9,14 +9,14 @@ class DimensionsUnit(Enum):
     Enum representing units of dimension.
 
     Attributes:
-        MM (tuple): Millimeter unit represented as "mm".
-        CM (tuple): Centimeter unit represented as "cm".
-        IN (tuple): Inch unit represented as "in".
+        MM (tuple): Millimeter unit represented as "MM".
+        CM (tuple): Centimeter unit represented as "CM".
+        IN (tuple): Inch unit represented as "IN".
     """
 
-    MM = "mm"
-    CM = "cm"
-    IN = "in"
+    MM = "MM"
+    CM = "CM"
+    IN = "IN"
 
 
 class WeightUnit(Enum):
@@ -24,14 +24,14 @@ class WeightUnit(Enum):
     Enum representing units of weight.
 
     Attributes:
-        GRAM (str): Gram unit represented as "g".
-        KG (str): Kilogram unit represented as "kg".
-        LB (str): Pound unit represented as "lb".
+        GRAM (str): Gram unit represented as "GRAM".
+        KG (str): Kilogram unit represented as "KG".
+        LB (str): Pound unit represented as "LB".
     """
 
-    GRAM = "g"
-    KG = "kg"
-    LB = "lb"
+    GRAM = "GRAM"
+    KG = "KG"
+    LB = "LB"
 
 
 def create_currency_enum() -> Type[Enum]:

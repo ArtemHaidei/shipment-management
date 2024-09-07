@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy import Column, String, Numeric, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -6,6 +8,10 @@ from sqlalchemy_utils import CurrencyType, Timestamp
 from app.choices import DimensionsUnit, WeightUnit
 from .database import Base
 from .utils import make_uuid
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("MODELS")
 
 
 class Country(Base):
@@ -341,12 +347,14 @@ class Shipment(Base, Timestamp):
         String(40), nullable=False
     )  # Shipment number, also known as the tracking number
     shipment_date = Column(
-        DateTime, nullable=False
+        DateTime(timezone=True), nullable=False
     )  # Date when the shipment was picked up
     price = Column(Numeric(10, 2), nullable=False)
     currency = Column(CurrencyType, nullable=False)
     total_weight = Column(Numeric(15, 2), nullable=False)
-    total_weight_unit = Column(Enum(WeightUnit), default=WeightUnit.GRAM, nullable=False)
+    total_weight_unit = Column(
+        Enum(WeightUnit), default=WeightUnit.GRAM, nullable=False
+    )
 
     packages = relationship("Package", back_populates="shipment")
 

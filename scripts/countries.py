@@ -9,11 +9,11 @@ from sqlalchemy import select, func
 
 from app.orm.database import async_session
 from app.orm.models import Country, State, City
-from app.schemas.address import CountryBase, StateIn, CityIn
+from app.schemas.address import CountryIn, StateIn, CityIn
 
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("countries")
+logger = logging.getLogger("DUMMY COUNTRIES")
 
 
 async def retrieve_data_from_json(path: str | None = None):
@@ -47,7 +47,7 @@ async def create_country(session, item: dict) -> Country:
     Returns:
         Country: The created Country object.
     """
-    schema = CountryBase(
+    schema = CountryIn(
         name=item["name"],
         code=item["numeric_code"],
         iso3=item["iso3"],
@@ -84,7 +84,7 @@ async def create_countries():
     """
     Creates country, state, and city records in the database from JSON data.
     """
-    async with async_session as session:
+    async with async_session() as session:
         async with session.begin():
             # Execute a query to count the number of entries in the Country table
             result = await session.execute(select(func.count()).select_from(Country))

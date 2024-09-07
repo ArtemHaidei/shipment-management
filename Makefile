@@ -2,12 +2,12 @@ HOST=$(shell hostname)
 
 path:
 	@echo "Export PYTHONPATH"
-	export PYTHONPATH="$PWD:$PYTHONPATH"
+
+	export PYTHONPATH=PWD
 
 install:
 	@echo "Creating virtual environment"
 	python3 -m venv env
-	make path
 	@echo "Installing python dependencies"
 	. env/bin/activate && python  -m pip install --upgrade pip
 	. env/bin/activate && pip install -r requirements.txt
@@ -39,7 +39,7 @@ docker-db:
 # ---------------------- Migrations ----------------------
 migration+:
 	@echo "Create and Upgrading database with message: $(m)"
-	. env/bin/activate && cd app && alembic revision --autogenerate -m "init db"
+	make migration m="init db"
 	make migrate
 
 migration:

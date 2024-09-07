@@ -42,7 +42,7 @@ async def create_carrier() -> None:
     """
     Creates carrier records in the database.
     """
-    async with async_session as session:
+    async with async_session() as session:
         async with session.begin():
             for item in carrier_data:
                 schema = CarrierIn(
