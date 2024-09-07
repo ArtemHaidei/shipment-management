@@ -2,7 +2,7 @@ HOST=$(shell hostname)
 
 path:
 	@echo "Export PYTHONPATH"
-	export PYTHONPATH=PWD
+	export PYTHONPATH=$PWD
 
 make env:
 	@echo "Creating virtual environment"
@@ -10,10 +10,11 @@ make env:
 
 install:
 	@echo "Installing python dependencies"
+	make path
 	. env/bin/activate && python  -m pip install --upgrade pip
 	. env/bin/activate && pip install -r requirements.txt
 	make docker-db
-	make migration+
+	make migrate
 	make dummy-data
 	make prod
 
@@ -36,6 +37,7 @@ docker-db:
 	make run
 	@echo "Waiting for the database container to start"
 	sleep 5
+	@echo "Creating the database"
 	make db
 
 # ---------------------- Migrations ----------------------
