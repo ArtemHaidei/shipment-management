@@ -21,3 +21,6 @@ Babel==2.16.0
 pydantic-extra-types==2.9.0
 pycountry==24.6.1
 aiofiles==24.1.0
+
+# performance
+locust==2.31.5

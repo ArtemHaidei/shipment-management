@@ -148,4 +148,3 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
     end = time.time()
-    logger.info(f"TOTAL TIME: {end - start}")

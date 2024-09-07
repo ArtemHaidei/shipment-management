@@ -23,6 +23,18 @@ logger = logging.getLogger("SHIPMENT SCHEMA")
 
 
 class PackageIn(BaseModel):
+    """
+    Represents the input of a package operation.
+
+    Attributes:
+        weight (float): The weight of the package.
+        weight_unit (WeightUnit): The unit of the weight.
+        length (float): The length of the package.
+        width (float): The width of the package.
+        height (float): The height of the package.
+        dimensions_unit (DimensionsUnit): The unit of the dimensions.
+    """
+
     model_config = ConfigDict(
         title="Carrier Create",
     )
@@ -75,6 +87,14 @@ class PackageIn(BaseModel):
 
 # ============================= In =============================
 class CarrierIn(BaseModel):
+    """
+    Represents the input of a carrier operation.
+
+    Attributes:
+        name (str): The name of the carrier.
+        regex_tracking_number (dict[str, constr]): The regex pattern for the tracking number of the carrier.
+    """
+
     model_config = ConfigDict(title="Carrier In")
 
     name: str = Field(
@@ -95,6 +115,21 @@ class CarrierIn(BaseModel):
 
 
 class ShipmentIn(BaseModel):
+    """
+    Represents the input of a shipment operation.
+
+    Attributes:
+        shipment_number (str): The shipment number.
+        shipment_date (datetime): The date when the shipment was picked up.
+        price (float): The price of the shipment.
+        currency (CurrencyEnum): The currency of the price.
+        total_weight (float): The total weight of the shipment.
+        total_weight_unit (WeightUnit): The unit of the total weight.
+        carrier (str): The name of the carrier.
+        address (AddressIn): The address associated with the shipment.
+        packages (list[PackageIn]): A list of packages included in the shipment.
+    """
+
     model_config = ConfigDict(use_enum_values=True)
 
     shipment_number: str = Field(
@@ -155,6 +190,18 @@ class ShipmentIn(BaseModel):
     @field_validator("shipment_date", mode="after")  # noqa
     @classmethod
     def check_if_not_in_future(cls, v: datetime) -> datetime:
+        """
+        Validates that the shipment date is not in the future.
+
+        Args:
+            v (datetime): The shipment date.
+
+        Raises:
+            ShipmentDateError: If the shipment date is in the future.
+
+        Returns:
+            datetime: The validated shipment date.
+        """
         if v.tzinfo is None and v.replace(tzinfo=timezone.utc) > datetime.now(
             timezone.utc
         ):
@@ -162,6 +209,16 @@ class ShipmentIn(BaseModel):
         return v
 
     async def validate_carrier(self) -> Any:
+        """
+        Validates the carrier and the shipment number against the carrier's regex patterns.
+
+        Returns:
+            Carrier: The validated carrier object.
+
+        Raises:
+            CarrierNotFoundError: If the carrier is not found.
+            ShipmentNumberMismatchError: If the shipment number does not match the carrier's regex patterns.
+        """
         async with async_session() as session, session.begin():
             result = await session.execute(
                 select(Carrier).where(Carrier.name == self.carrier)  # noqa
@@ -184,26 +241,55 @@ class ShipmentIn(BaseModel):
 
 # ============================= OUT =============================
 class PackageOut(BaseModel):
-    id: UUID
-    weight: float
-    weight_unit: WeightUnit
-    length: float
-    width: float
-    height: float
-    dimensions_unit: DimensionsUnit
+    """
+    Represents the output of a package operation.
+
+    Attributes:
+        id (UUID): The unique identifier of the package.
+        weight (float): The weight of the package.
+        weight_unit (WeightUnit): The unit of the weight.
+        length (float): The length of the package.
+        width (float): The width of the package.
+        height (float): The height of the package.
+        dimensions_unit (DimensionsUnit): The unit of the dimensions.
+    """
+
+    id: UUID = Field(..., examples=["0191ca45-ce30-4040-a269-74bd3966f180"])
+    weight: float = Field(..., examples=[25])
+    weight_unit: WeightUnit = Field(..., examples=[WeightUnit.GRAM])
+    length: float = Field(..., examples=[1.5])
+    width: float = Field(..., examples=[5])
+    height: float = Field(..., examples=[10])
+    dimensions_unit: DimensionsUnit = Field(..., examples=[DimensionsUnit.CM])
 
 
 class ShipmentOut(BaseModel):
+    """
+    Represents the output of a shipment operation.
+
+    Attributes:
+        id (UUID): The unique identifier of the shipment.
+        shipment_number (str): The shipment number.
+        shipment_date (datetime): The date when the shipment was picked up.
+        price (float): The price of the shipment.
+        currency (CurrencyEnum): The currency of the price.
+        total_weight (float): The total weight of the shipment.
+        total_weight_unit (WeightUnit): The unit of the total weight.
+        carrier (str): The name of the carrier.
+        address (AddressOut): The address associated with the shipment.
+        packages (list[PackageOut]): A list of packages included in the shipment.
+    """
+
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
-    id: UUID
-    shipment_number: str
-    shipment_date: datetime
-    price: float
-    currency: CurrencyEnum
-    total_weight: float
-    total_weight_unit: WeightUnit
-    carrier: str
+    id: UUID = Field(..., examples=["0191ca45-ce30-4040-a269-74bd3966f180"])
+    shipment_number: str = Field(..., examples=["1Z12345E1512345676"])
+    shipment_date: datetime = Field(..., examples=["2021-10-01T12:00:00Z"])
+    price: float = Field(..., examples=[45])
+    currency: CurrencyEnum = Field(..., examples=[CurrencyEnum.USD])
+    total_weight: float = Field(..., examples=[0.5])
+    total_weight_unit: WeightUnit = Field(..., examples=[WeightUnit.GRAM])
+    carrier: str = Field(..., examples=["ups"])
     address: AddressOut
     packages: list[PackageOut]
 
@@ -219,6 +305,19 @@ class ShipmentOut(BaseModel):
 
 
 class ShipmentListOut(BaseModel):
+    """
+    Represents the output of a shipment list operation.
+
+    Attributes:
+        page (int): The current page number.
+        next_page (int | None): The next page number, if available.
+        last_page (int): The last page number.
+        limit (int): The number of items per page.
+        total (int): The total number of items.
+        items (int): The number of items on the current page.
+        records (list[ShipmentOut]): A list of shipment records on the current page.
+    """
+
     model_config = ConfigDict(title="Country Out")
 
     page: int = Field(
@@ -258,10 +357,25 @@ class ShipmentListOut(BaseModel):
 
 
 class PostOut(BaseModel):
+    """
+    Represents the output of a post operation.
+
+    Attributes:
+        created (int): The number of created records.
+        message (str): A message indicating the result of the operation.
+    """
+
     created: int
     message: str
 
 
 class ShipmentPostOut(PostOut):
+    """
+    Represents the output of a shipment post operation, inheriting from PostOut.
+
+    Attributes:
+        records (list[ShipmentOut]): A list of created shipment records.
+    """
+
     model_config = ConfigDict(from_attributes=True)
     records: list[ShipmentOut]

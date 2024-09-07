@@ -10,7 +10,16 @@ from app.schemas.shipment import ShipmentIn, ShipmentOut
 from app.schemas.address import AddressId
 
 
-async def shipments_post_request(stmt):
+async def shipments_post_request(stmt) -> list[Shipment]:
+    """
+    Executes a SQL statement to retrieve shipments from the database and returns the results.
+
+    Args:
+        stmt: The SQL statement to execute.
+
+    Returns:
+        list: A list of unique Shipment objects.
+    """
     async with async_session() as session, session.begin():
         stmt = stmt.order_by(Shipment.created.desc())
         stmt = stmt.options(
@@ -25,7 +34,17 @@ async def shipments_post_request(stmt):
         return results.scalars().unique().all()
 
 
-async def shipments_get_request(stmt, total_stmt):
+async def shipments_get_request(stmt, total_stmt) -> tuple[list[Shipment], int]:
+    """
+    Executes SQL statements to retrieve shipments and their total count from the database.
+
+    Args:
+        stmt: The SQL statement to execute for retrieving shipments.
+        total_stmt: The SQL statement to execute for retrieving the total count of shipments.
+
+    Returns:
+        tuple: A tuple containing a list of unique Shipment objects and the total count of shipments.
+    """
     async with async_session() as session, session.begin():
         total_result = await session.execute(total_stmt)
 
@@ -52,6 +71,15 @@ async def shipments_get_request(stmt, total_stmt):
 async def retrive_shipments_from_db(
     **kwargs,
 ) -> tuple[list[Shipment], int] | tuple[list, Any]:
+    """
+    Retrieves shipments from the database based on provided filters.
+
+    Args:
+        **kwargs: Arbitrary keyword arguments for filtering shipments.
+
+    Returns:
+        tuple: A tuple containing a list of Shipment objects and the total count of shipments.
+    """
     limit = kwargs.get("limit", 10)
     page = kwargs.get("page", 1)
     offset = (page - 1) * limit
@@ -87,6 +115,16 @@ async def retrive_shipments_from_db(
 
 
 def create_packages(shipment: ShipmentIn, shipment_id: UUID) -> list[Package]:
+    """
+    Creates Package objects for a given shipment.
+
+    Args:
+        shipment (ShipmentIn): The shipment data.
+        shipment_id (UUID): The ID of the shipment.
+
+    Returns:
+        list: A list of Package objects.
+    """
     return [
         Package(
             **package.model_dump(),
@@ -99,8 +137,18 @@ def create_packages(shipment: ShipmentIn, shipment_id: UUID) -> list[Package]:
 async def create_shipment_in_db(
     shipments: tuple[AddressId], carriers: tuple[Carrier]
 ) -> tuple[list[Shipment], int]:
-    shipments_id: list[ShipmentOut] = []
+    """
+    Creates shipments in the database.
 
+    Args:
+        shipments (tuple[AddressId]): A tuple containing AddressId objects representing the shipments.
+        carriers (tuple[Carrier]): A tuple containing Carrier objects.
+
+    Returns:
+        tuple[list[Shipment], int]: A tuple containing a list of created Shipment objects and the total number of shipments created.
+    """
+
+    shipments_id: list[ShipmentOut] = []
     async with async_session() as session, session.begin():
         for item in shipments:
             address = Address(

@@ -2,18 +2,20 @@ HOST=$(shell hostname)
 
 path:
 	@echo "Export PYTHONPATH"
-
 	export PYTHONPATH=PWD
 
-install:
+make env:
 	@echo "Creating virtual environment"
 	python3 -m venv env
+
+install:
 	@echo "Installing python dependencies"
 	. env/bin/activate && python  -m pip install --upgrade pip
 	. env/bin/activate && pip install -r requirements.txt
 	make docker-db
 	make migration+
 	make dummy-data
+	make prod
 
 # ---------------------- Bash ----------------------
 db:
@@ -64,11 +66,11 @@ countries:
 	@echo "Running script to create countries"
 	. env/bin/activate && python scripts/countries.py
 
-shipments:
-	@echo "Running script to create shipments"
+carriers:
+	@echo "Running script to create carriers"
 	. env/bin/activate && python scripts/carriers.py
 
 dummy-data:
 	@echo "Running script to create dummy data"
-	make shipments
+	make carriers
 	make countries

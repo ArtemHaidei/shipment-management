@@ -9,9 +9,9 @@ class DimensionsUnit(Enum):
     Enum representing units of dimension.
 
     Attributes:
-        MM (tuple): Millimeter unit represented as "MM".
-        CM (tuple): Centimeter unit represented as "CM".
-        IN (tuple): Inch unit represented as "IN".
+        MM (str): Millimeter unit represented as "MM".
+        CM (str): Centimeter unit represented as "CM".
+        IN (str): Inch unit represented as "IN".
     """
 
     MM = "MM"

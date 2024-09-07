@@ -3,7 +3,6 @@ import logging
 from uuid import UUID
 from typing import Any
 from sqlalchemy import select
-from fastapi import HTTPException
 from pydantic import field_validator, model_validator
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -16,6 +15,7 @@ from app.exceptions.address import (
     CityNotFoundError,
     StateCountryMismatchError,
     CityCountryMismatchError,
+    CountryParametrError,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +24,16 @@ logger = logging.getLogger("ADDRESS SCHEMA")
 
 # ============================= Country =============================
 class CountryIn(BaseModel):
+    """
+    Represents the input of a country operation.
+
+    Attributes:
+        name (str): The name of the country.
+        code (str): The numeric code of the country.
+        iso2 (str): The ISO2 code of the country.
+        iso3 (str): The ISO3 code of the country.
+    """
+
     name: str = Field(..., max_length=100, min_length=2)
     code: str = Field(..., pattern="^[0-9]{3}$")
     iso2: str = Field(..., pattern="^[A-Za-z]{2}$")
@@ -32,10 +42,21 @@ class CountryIn(BaseModel):
     @field_validator("iso2", "iso3", mode="before")  # noqa
     @classmethod
     def uppercase_country_code(cls, value: str) -> str:
+        """Converts the country code to uppercase."""
         return value.upper()
 
 
 class CountryOneField(BaseModel):
+    """
+    Represents a country with optional search fields.
+
+    Attributes:
+        name (str | None): The name of the country.
+        code (str | None): The numeric code of the country.
+        iso2 (str | None): The ISO2 code of the country.
+        iso3 (str | None): The ISO3 code of the country.
+    """
+
     model_config = ConfigDict(title="Country Search")
     name: str | None = Field(
         None,
@@ -69,29 +90,43 @@ class CountryOneField(BaseModel):
     @field_validator("iso2", "iso3", mode="before")  # noqa
     @classmethod
     def uppercase_country_code(cls, value: str) -> str:
+        """Converts the country code to uppercase."""
         return value.upper() if value else None
 
     @model_validator(mode="after")
     def check_if_no_search_params(self):
+        """
+        Validates that at least one search parameter is provided.
+
+        Raises:
+            CountryParametrError: If no search parameters are provided.
+        """
         if not any(self.model_dump().values()):
-            raise HTTPException(
-                status_code=400,
-                detail="At least one search parameter for Country must be provided.",
-            )
+            raise CountryParametrError()
         return self
 
     def get_search_params(self) -> tuple[str, str]:
+        """
+        Retrieves the first non-null search parameter.
+
+        Returns:
+            tuple[str, str]: A tuple containing the field name and its value.
+        """
         for key, value in self.model_dump().items():
             if value:
                 return key, value
 
-    def get_existed_field(self) -> str:
-        key, value = self.get_search_params()
-        return value
-
 
 # ============================= In =============================
 class StateIn(BaseModel):
+    """
+    Represents the input of a state operation.
+
+    Attributes:
+        name (str): The name of the state.
+        country_id (UUID): The UUID of the country.
+    """
+
     name: str = Field(
         ...,
         max_length=100,
@@ -101,6 +136,15 @@ class StateIn(BaseModel):
 
 
 class CityIn(BaseModel):
+    """
+    Represents the input of a city operation.
+
+    Attributes:
+        name (str): The name of the city.
+        state_id (UUID): The UUID of the state.
+        country_id (UUID): The UUID of the country.
+    """
+
     name: str = Field(
         ...,
         max_length=100,
@@ -111,6 +155,16 @@ class CityIn(BaseModel):
 
 
 class AddressId(BaseModel):
+    """
+    Represents the ID information of an address.
+
+    Attributes:
+        shipment (Any): The shipment associated with the address.
+        city_id (UUID): The UUID of the city.
+        state_id (UUID): The UUID of the state.
+        country_id (UUID): The UUID of the country.
+    """
+
     shipment: Any
     city_id: UUID
     state_id: UUID
@@ -118,6 +172,18 @@ class AddressId(BaseModel):
 
 
 class AddressIn(BaseModel):
+    """
+    Represents the input of an address operation.
+
+    Attributes:
+        postal_code (str): The postal code of the address.
+        address_line_1 (str): The first line of the address.
+        address_line_2 (str | None): The second line of the address, if any.
+        city (str): The name of the city.
+        state (str): The name of the state.
+        country (CountryOneField): The country information.
+    """
+
     postal_code: str = Field(
         ...,
         title="Postal Code",
@@ -158,9 +224,35 @@ class AddressIn(BaseModel):
     @field_validator("address_line_2", mode="before")  # noqa
     @classmethod
     def check_address_line_2(cls, value: str) -> str | None:
+        """
+        Validates the address line 2 field.
+
+        Args:
+            value (str): The value of the address line 2 field.
+
+        Returns:
+            str | None: The validated address line 2 or None if not provided.
+        """
         return value if value else None
 
     async def check_if_country_state_city_exists(self, parent: Any) -> AddressId:
+        """
+        Checks if the country, state, and city exist in the database.
+
+        Args:
+            parent (Any): The parent object.
+
+        Returns:
+            AddressId: The address ID object containing the IDs of the city, state, and country.
+
+        Raises:
+            CountryNotFoundError: If the country is not found.
+            StateNotFoundError: If the state is not found.
+            CityNotFoundError: If the city is not found.
+            StateCountryMismatchError: If the state does not belong to the country.
+            CityStateMismatchError: If the city does not belong to the state.
+            CityCountryMismatchError: If the city does not belong to the country.
+        """
         async with async_session() as session:
             async with session.begin():
                 field, value = self.country.get_search_params()
@@ -204,16 +296,39 @@ class AddressIn(BaseModel):
 
 # ============================= OUT =============================
 class AddressOut(BaseModel):
+    """
+    Represents the output of an address operation.
+
+    Attributes:
+        postal_code (str): The postal code of the address.
+        address_line_1 (str): The first line of the address.
+        address_line_2 (str | None): The second line of the address, if any.
+        city (str): The name of the city.
+        state (str): The name of the state.
+        country (str): The code of the country.
+    """
+
     model_config = ConfigDict(title="Address Out")
-    postal_code: str
-    address_line_1: str
-    address_line_2: str | None
+    postal_code: str = Field(..., examples=["12345"])
+    address_line_1: str = Field(..., examples=["1234 Main St."])
+    address_line_2: str | None = Field(None, examples=["Apt. 1234"])
 
-    city: str
-    state: str
-    country: str
+    city: str = Field(..., examples=["New York"])
+    state: str = Field(..., examples=["New York"])
+    country: str = Field(..., examples=["USA"])
 
-    @field_validator("city", "state", "country", mode="before")  # noqa
+    @field_validator("country", mode="before")  # noqa
+    @classmethod
+    def retrive_code(cls, country) -> str:
+        """
+        Retrieves the Country code of the field.
+        """
+        return country.iso3
+
+    @field_validator("city", "state", mode="before")  # noqa
     @classmethod
     def retrive_name(cls, field) -> str:
+        """
+        Retrieves the name of the field.
+        """
         return field.name

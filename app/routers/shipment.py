@@ -47,7 +47,7 @@ async def retrive_shipments(
         Query(title="Maximum price for filtering", ge=0, le=1_000_000, example=1000),
     ] = None,
     page: Annotated[int, Query(title="Page number", ge=1)] = 1,
-    limit: Annotated[int, Query(title="Number of items per page", ge=1, le=30)] = 10,
+    limit: Annotated[int, Query(title="Number of items per page", ge=1, le=100)] = 10,
 ):
     """
     Retrieves a list of shipments from the database.
@@ -81,6 +81,16 @@ async def retrive_shipments(
             status_code=status.HTTP_404_NOT_FOUND, detail="No shipments found."
         )
 
+    if len(shipments) == 0:
+        if page > 1:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="No more shipments found."
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No shipments found."
+        )
+
     return {
         "page": page,
         "next_page": page + 1 if total > page * limit else None,
@@ -99,18 +109,31 @@ async def create_shipment(
         list[ShipmentIn], Body(title="List of shipments", min_length=1, max_length=100)
     ],
 ):
+    """
+    Creates new shipment records in the database.
+
+    Args:
+        shipments (list[ShipmentIn]): A list of shipment data to be created. The list must contain between 1 and 100 items.
+
+    Returns:
+        JSONResponse: A JSON response containing the number of created records and a message indicating the result.
+    """
+    # Validate the carriers for each shipment
     cariers = await asyncio.gather(
         *(shipment.validate_carrier() for shipment in shipments)
     )
+    # Check if the country, state, and city exist for each shipment's address
     result = await asyncio.gather(
         *(
             shipment.address.check_if_country_state_city_exists(shipment)
             for shipment in shipments
         )
     )
+    # Create the shipments in the database
     result_lst, records_recieved_len = await create_shipment_in_db(result, cariers)
     created_records = len(result_lst)
 
+    # If not all records were created, return a partial success response
     if created_records != records_recieved_len:
         return JSONResponse(
             content={
@@ -119,7 +142,7 @@ async def create_shipment(
             },
             status_code=status.HTTP_200_OK,
         )
-    print(isinstance(result_lst, list))
+
     return {
         "created": created_records,
         "records": result_lst,

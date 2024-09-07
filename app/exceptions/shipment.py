@@ -2,6 +2,13 @@ from fastapi import HTTPException
 
 
 class CarrierNotFoundError(HTTPException):
+    """
+    Exception raised when a carrier is not found.
+
+    Args:
+        carrier_name (str): The name of the carrier that was not found.
+    """
+
     def __init__(self, carrier_name: str):
         super().__init__(
             status_code=400,
@@ -16,6 +23,14 @@ class CarrierNotFoundError(HTTPException):
 
 
 class ShipmentNumberMismatchError(HTTPException):
+    """
+    Exception raised when a shipment number does not match any pattern for a carrier.
+
+    Args:
+        carrier_name (str): The name of the carrier.
+        shipment_number (str): The shipment number that does not match any pattern.
+    """
+
     def __init__(self, carrier_name: str, shipment_number: str):
         super().__init__(
             status_code=400,
@@ -28,6 +43,10 @@ class ShipmentNumberMismatchError(HTTPException):
 
 
 class ShipmentDateError(HTTPException):
+    """
+    Exception raised when the shipment pickup date is in the future.
+    """
+
     def __init__(self):
         super().__init__(
             status_code=400,

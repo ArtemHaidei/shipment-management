@@ -1,3 +1,4 @@
+from prometheus_fastapi_instrumentator import Instrumentator
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
@@ -7,16 +8,22 @@ from app.routers import shipment
 description = """
 # Senvo API
 
-#### This is the API for the Senvo project. It allows you to manage shipments.
+### Overview
+The **Senvo API** is the backend service for managing shipments within the Senvo project. This API adheres to REST principles, offering a reliable and predictable interface for interacting with shipment data.
 
-The API is organized around REST. 
-It has predictable resource-oriented URLs, accepts form-encoded request bodies, returns JSON-encoded responses, and uses standard HTTP response codes.
-The API is designed to have predictable, resource-oriented URLs and to use HTTP response codes to indicate API errors.
+### Key Features
+- **RESTful Structure**: The API follows a resource-oriented approach, ensuring a consistent and intuitive experience.
+- **Standardized Responses**: Requests and responses follow standard HTTP protocols, with responses encoded in JSON format.
+- **Error Handling**: API errors are communicated using conventional HTTP response codes for improved reliability.
 
-#### You will be able to:
+### Core Functionalities
+The Senvo API provides the following key operations:
 
-* **Create a shipments**: Create a new shipments in the database.
-* **Retrieve shipments**: Retrieve a list of shipments from the database.
+- **Create Shipments**: Add new shipment entries to the database.
+- **Retrieve Shipments**: Fetch a list of shipment records from the database.
+
+### Getting Started
+The API is designed to accept form-encoded request bodies, making it easy to interact with using common HTTP methods.
 """
 
 app = FastAPI(
@@ -27,8 +34,12 @@ app = FastAPI(
 )
 app.include_router(shipment.router)
 
+Instrumentator().instrument(app).expose(app)
 
-# redirect from main to /docs
+
 @app.get("/", include_in_schema=False)
 async def redirect_to_docs():
+    """
+    Redirects the root URL to the API documentation.
+    """
     return RedirectResponse(url="/docs")
