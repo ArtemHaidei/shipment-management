@@ -6,10 +6,10 @@ from app.routers import shipment
 
 
 description = """
-# Senvo API
+# API Service for managing shipments
 
 ### Overview
-The **Senvo API** is the backend service for managing shipments within the Senvo project. This API adheres to REST principles, offering a reliable and predictable interface for interacting with shipment data.
+This API adheres to REST principles, offering a reliable and predictable interface for processing shipment data.
 
 ### Key Features
 - **RESTful Structure**: The API follows a resource-oriented approach, ensuring a consistent and intuitive experience.
