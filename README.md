@@ -1,11 +1,10 @@
-# Senvo API
+# API Service for managing shipments
 
 ___
 
 ### Overview
 
-The **Senvo API** is the backend service for managing shipments within the Senvo project.
-This API adheres to REST principles, offering a reliable and predictable interface for interacting with shipment data.
+This API adheres to REST principles, offering a reliable and predictable interface for processing shipment data.
 
 ### Key Features
 
@@ -18,7 +17,7 @@ This API adheres to REST principles, offering a reliable and predictable interfa
 
 The Senvo API provides the following key operations:
 
-- **Create Shipments**: Add new shipments entries to the database.
+- **Create Shipments**: Add new shipment entries to the database.
 - **Retrieve Shipments**: Fetch a list of shipment records from the database.
 
 ### Performance Testing
@@ -28,19 +27,19 @@ The Senvo API provides the following key operations:
 
 ### Getting Started
 
-The API is designed to accept form-encoded request bodies, making it easy to interact with using common HTTP methods.
+The API is designed to accept form-encoded request bodies, making it easy to interact using common HTTP methods.
 ___
 
 # Installation
 
 ### For Unix-based systems
 
-* There is a **Mackefile** to install the dependencies and run the server.
-* You need to have global **Python 3.10** or higher installed on your system.
+* There is a **Makefile** to install the dependencies and run the server.
+* You must have global **Python 3.10** or higher installed on your system.
 
 ___
 
-For creating env/ directory:
+For creating an env/ directory:
 
 ```bash 
 make env
@@ -52,13 +51,13 @@ Next:
 make install
 ```
 
-**make install** comand will:
+**make install** command will:
 
 - Install dependencies from requirements.txt
-- Create docker container with **POSTGRESQL**
+- Create a docker container with **POSTGRESQL**
 - Create database
 - Make migrations
-- Create Countreis, States and Cities
+- Create Countries, States, and Cities
 - Create Careers
 - Run server
 
@@ -66,7 +65,7 @@ make install
 Other way:
 
 1. Create virtualenv
-    - **Optional**: Add path to envairoment variables
+    - **Optional**: Add path to environment variables
         ```zsh
         export PYTHONPATH=$PWD
         ```
@@ -94,7 +93,7 @@ Other way:
    alembic upgrade head
    ```
 
-7. Create Countreis, States and Cities
+7. Create Countries, States, and Cities
 
    ```zsh
    python scripts/countries.py
@@ -106,7 +105,7 @@ Other way:
    python scripts/carriers.py
    ```
 
-9. Run server
+9. Run the server
 
    ```zsh
    fastapi run app/main.py
@@ -129,7 +128,7 @@ From the root directory:
 
 - Open your browser and go to http://localhost:8089/
 - Enter the number of users to simulate and the hatch rate, then click "Start swarming".
-- For dev HOST enter http://localhost:8000 (or your server address)
-- For prod HOST enter https://0.0.0.0:8000 (or your server address)
+- For dev HOST, enter http://localhost:8000 (or your server address)
+- For prod HOST, enter https://0.0.0.0:8000 (or your server address)
 
 ___
